@@ -6,7 +6,7 @@
 
 - `github.com/minio/cli` fork 别人的项目
 
-- `"net/http"` 用的自带的 http 框架
+- `"net/http"` 用的标准库的 http 框架
 
 - `http` 模块 -> `server.go` ->  `func NewServer`  创建一个新的 http 服务
 
@@ -24,14 +24,21 @@
 
 ## 待解疑惑
 
-- 为什么读取目录下的所有文件要用 `syscall.ReadDirent`而并不是`ioutil.ReadDir`?
+#### 1. 为什么读取目录下的所有文件要用 `syscall.ReadDirent`而并不是`ioutil.ReadDir`?
 
-- 并发上传时，采用了锁，但是如何保证性能，让其他没抢到锁的线程任然可以上传？
+#### 2. 并发上传时，采用了锁，但是如何保证性能，让其他没抢到锁的线程任然可以上传？
 
-  **测试的结果是:** 
-
+  **测试的结果是:**
   两个客户端可以同时并发上传文件到同一个 key，两个都会成功，都没有阻塞，后完成上传的会覆盖先完成上传的。
   跟谁先开始上传没关系。
+
+  上传文件时， `minio` 会将文件内容保存到临时目录`drive/.minio.sys/tmp/[fsUUID]/[tempObjUUID]`。再重命名到目标路径。
+
+  `fsUUID`每次启动程序的时候生产一个， 可以理解为对应一个单独的实例
+
+  `tempObjUUID` 每调用一次`putObject`函数生成一个， 可以立即为一次请求生产一个。
+
+  putObject函数执行完毕后， 不管出错还是成功，都会删除这个临时文件。
 
 ## 搭建测试环境
 
@@ -70,8 +77,24 @@ export _MINIO_SERVER_DEBUG = on
 
 `drives` ： 存储路径
 
+```go
+// Config represents cache config settings
+type Config struct {
+    Enabled         bool     `json:"-"`  // - 表示序列化的时候忽略该字段
+    Drives          []string `json:"drives"`
+    Expiry          int      `json:"expiry"`
+    ...
+}
+```
+
+`fsMetaV1`  结构体的 `WriteTo()` 方法用来保存 json 文件， 也就是元数据
+
 ### 处理流程
 
-以删除对象为例
+#### 删除对象
 
-routers -> `objectAPIHandlers.DeleteObjectHandler()` -> `objects.DeleteObject()`
+ `routers` -> `objectAPIHandlers.DeleteObjectHandler()` -> `objects.DeleteObject()`
+
+#### 上传对象
+
+`PutObjectHandler`-> `FSObjects{}.PutObject()`-> `FSObjects{}.putObject` -> `fsCreateFile()`
