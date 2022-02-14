@@ -26,6 +26,13 @@
 
 - 为什么读取目录下的所有文件要用 `syscall.ReadDirent`而并不是`ioutil.ReadDir`?
 
+- 并发上传时，采用了锁，但是如何保证性能，让其他没抢到锁的线程任然可以上传？
+
+  **测试的结果是:** 
+
+  两个客户端可以同时并发上传文件到同一个 key，两个都会成功，都没有阻塞，后完成上传的会覆盖先完成上传的。
+  跟谁先开始上传没关系。
+
 ## 搭建测试环境
 
 ### 使用 GUI 工具测试
@@ -45,6 +52,7 @@ export _MINIO_SERVER_DEBUG = on
   - cmd  # 具体的读写本地文件都在这个模块，看起来像是 control + view
     
     - ***-hangdlers.go  # 处理器，类似于 views
+    - api-errors.go  # 自定义 http 错误，利用了常量 iota
   
   - internal
     
